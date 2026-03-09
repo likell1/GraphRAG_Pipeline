@@ -163,6 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_concern_effect_map_effect_id
     ON concern_effect_map (effect_id);
 
 
+
 -- =========================================================
 -- 6. Paper Metadata
 -- =========================================================
@@ -185,18 +186,16 @@ CREATE TABLE IF NOT EXISTS paper_metadata (
     updated_at           TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- doi, pmid, pmcid는 NULL 허용하면서 중복 방지
+-- 일반 unique index 사용
+-- PostgreSQL에서는 UNIQUE 컬럼도 NULL 값은 여러 개 허용됨
 CREATE UNIQUE INDEX IF NOT EXISTS uq_paper_metadata_doi
-    ON paper_metadata (doi)
-    WHERE doi IS NOT NULL;
+    ON paper_metadata (doi);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_paper_metadata_pmid
-    ON paper_metadata (pmid)
-    WHERE pmid IS NOT NULL;
+    ON paper_metadata (pmid);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_paper_metadata_pmcid
-    ON paper_metadata (pmcid)
-    WHERE pmcid IS NOT NULL;
+    ON paper_metadata (pmcid);
 
 CREATE INDEX IF NOT EXISTS idx_paper_metadata_publication_year
     ON paper_metadata (publication_year);
