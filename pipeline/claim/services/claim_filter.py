@@ -25,6 +25,26 @@ HARD_NON_CLAIM_PATTERNS = [
     "cost effective",
     "cost-saving",
     "cost saving",
+    "microemulsion",
+    "nanoemulsion",
+    "particle size",
+    "release profile",
+    "encapsulation efficiency",
+    "drug delivery",
+    "transdermal delivery",
+    "cell migration",
+    "gene expression",
+    "protein expression",
+    "mrna expression",
+    "dermal papilla",
+    "dpc",
+    "carcinoma",
+    "cancer",
+    "tumor",
+    "tumour",
+    "perioperative bleeding",
+    "blood loss",
+    "cardiac surgery",
 ]
 
 HARD_NON_TARGET_SUBJECT_PATTERNS = [
@@ -42,6 +62,30 @@ HARD_NON_TARGET_SUBJECT_PATTERNS = [
     "formulations",
     "liposomes",
     "liposome",
+]
+
+COSMETIC_CONTEXT_MARKERS = [
+    "skin",
+    "facial",
+    "barrier",
+    "hydration",
+    "moistur",
+    "hyperpigmentation",
+    "melasma",
+    "pigmentation",
+    "photoaging",
+    "photo-damaged",
+    "photodamaged",
+    "uv",
+    "uvb",
+    "acne",
+    "sebum",
+    "irritation",
+    "erythema",
+    "redness",
+    "tolerability",
+    "tolerance",
+    "tewl",
 ]
 
 CLAIM_MARKERS = [
@@ -102,14 +146,8 @@ CLAIM_MARKERS = [
     "soothing",
     "repairing",
     "lowered",
-    "inhibiting",
-    "inhibited",
-    "stimulated",
-    "modulated",
     "mitigate",
     "mitigates",
-    "impressive modalities",
-    "confer superior improvements",
 ]
 
 NEGATION_MARKERS = [
@@ -151,23 +189,20 @@ def is_claim_candidate_sentence(sentence: str) -> bool:
     if any(normalized.startswith(pattern) for pattern in HARD_NON_TARGET_SUBJECT_PATTERNS):
         return False
 
-    # CER2, CER14 같은 ceramide subclass는 현재 프로젝트 스코프에서는 제외
     if normalized.startswith("cer") and len(normalized) >= 4 and normalized[3].isdigit():
         return False
 
-    if lower.startswith("results:") or lower.startswith("result:"):
-        return True
+    has_cosmetic_context = any(marker in lower for marker in COSMETIC_CONTEXT_MARKERS)
+    has_claim_signal = (
+        lower.startswith("results:")
+        or lower.startswith("result:")
+        or lower.startswith("conclusion:")
+        or lower.startswith("conclusions:")
+        or any(marker in lower for marker in CLAIM_MARKERS)
+        or any(marker in lower for marker in NEGATION_MARKERS)
+    )
 
-    if lower.startswith("conclusion:") or lower.startswith("conclusions:"):
-        return True
-
-    if any(marker in lower for marker in CLAIM_MARKERS):
-        return True
-
-    if any(marker in lower for marker in NEGATION_MARKERS):
-        return True
-
-    return False
+    return has_cosmetic_context and has_claim_signal
 
 
 def is_claim_worthy_section(section_type: str | None) -> bool:

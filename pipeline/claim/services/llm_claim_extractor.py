@@ -96,26 +96,56 @@ CLAIMS_JSON_SCHEMA: Dict[str, Any] = {
     },
 }
 
-SYSTEM_PROMPT = """You are a precise biomedical claim extraction system for dermatology and cosmetic science papers.
 
-Your task:
-- Read exactly one sentence from a paper abstract.
-- Extract ONLY explicit ingredient-related claims stated in that sentence.
-- Return JSON only, matching the provided schema exactly.
+SYSTEM_PROMPT = """You are a strict dermatology/cosmetic-ingredient claim extraction system.
 
-Important rules:
-1. Do not infer or hallucinate.
-2. Do not summarize the whole paper.
-3. Do not extract claims from background, objective, methods, or generic review framing unless the sentence itself explicitly states an ingredient-related claim.
-4. If there is no valid claim, return {"claims": []}.
-5. A single sentence may contain multiple claims. Return all valid claims.
-6. The ingredient must be explicitly identifiable from the sentence or strongly supported by the provided candidate list.
-7. Keep evidence_text as the original sentence text, unchanged.
-8. Use only the allowed enum values.
-9. If the sentence contains weak uncertainty such as 'may', 'might', 'appears', 'suggests', set hedging=true.
-10. If the sentence contains negation such as 'did not', 'no significant', 'not associated', set negation=true.
-11. If the sentence compares to another treatment, only extract the explicit claim supported by the sentence.
-12. If no ingredient-related claim is present, return {"claims": []}.
+You will read exactly one sentence from a paper abstract and extract only explicit, sentence-level claims.
+
+Return JSON only.
+
+Hard rules:
+1. Extract claims only when the ingredient claim is explicit in the sentence.
+2. Do not infer from the whole abstract.
+3. Do not use background/method framing as evidence.
+4. If no valid claim exists, return {"claims": []}.
+5. Use only the provided enum values.
+6. Keep evidence_text exactly equal to the input sentence.
+7. Only extract ingredient claims relevant to cosmetic/skin outcomes.
+
+Keep claims only for targets like:
+- hyperpigmentation
+- melasma
+- skin barrier function
+- hydration
+- dry skin
+- irritation
+- erythema
+- redness
+- acne
+- sebum production
+- photoaging
+- wrinkles
+- UV-induced immunosuppression
+- post-inflammatory hyperpigmentation
+- tolerability / tolerance
+
+Reject claims if the target is mainly about:
+- carcinoma, cancer, tumor
+- surgery, perioperative bleeding, blood loss
+- microemulsion, nanoemulsion, particle size, release profile
+- drug delivery / formulation optimization
+- cell migration, dermal papilla cells, gene expression only
+- generic therapy/treatment effectiveness
+- non-skin systemic outcomes
+
+Relation guidance:
+- improves / reduces / prevents are preferred for efficacy
+- is_well_tolerated_for or is_safe_for for tolerability/safety
+- increases should be used only for clearly cosmetic targets such as hydration, elasticity, or tolerance
+- do not output stimulates for cell migration or other lab-mechanism-only targets
+
+If the sentence contains uncertainty words like 'may', 'might', 'appears', 'suggests', set hedging=true.
+If the sentence contains negation like 'did not', 'no significant', 'not associated', set negation=true.
 """
 
 
@@ -243,7 +273,39 @@ Return JSON only.
         claims = obj.get("claims", [])
         if not isinstance(claims, list):
             return []
-        return [claim for claim in claims if isinstance(claim, dict)]
+
+        cleaned_claims = []
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+
+            target = str(claim.get("target", "")).strip().lower()
+            if any(
+                blocked in target
+                for blocked in [
+                    "carcinoma",
+                    "cancer",
+                    "tumor",
+                    "tumour",
+                    "microemulsion",
+                    "nanoemulsion",
+                    "particle size",
+                    "release profile",
+                    "drug delivery",
+                    "cell migration",
+                    "dermal papilla",
+                    "gene expression",
+                    "therapy",
+                    "treatment",
+                    "blood loss",
+                    "perioperative",
+                ]
+            ):
+                continue
+
+            cleaned_claims.append(claim)
+
+        return cleaned_claims
 
 
 llm_extractor = LLMClaimExtractor()
