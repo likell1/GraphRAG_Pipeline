@@ -52,8 +52,22 @@ def _get_chunk_level_ingredient_candidates(sentences: list[str]) -> list[str]:
         if sentence_candidates:
             candidates.extend(sentence_candidates)
 
-    # 순서 유지 + 중복 제거
     return list(dict.fromkeys(candidates))
+
+
+def _resolve_ingredient_candidates_for_sentence(
+    sentence: str,
+    chunk_ingredient_candidates: list[str],
+) -> list[str]:
+    sentence_candidates = _get_sentence_level_ingredient_candidates(sentence)
+    if sentence_candidates:
+        return sentence_candidates
+
+    # fallback은 chunk 전체에서 딱 1개 후보일 때만 허용
+    if len(chunk_ingredient_candidates) == 1:
+        return chunk_ingredient_candidates
+
+    return []
 
 
 def _chunk_has_candidate_sentence(chunk: dict) -> bool:
@@ -88,29 +102,12 @@ def _chunk_has_candidate_sentence(chunk: dict) -> bool:
 
 
 def select_candidate_rich_chunks(conn) -> list[dict]:
-    """
-    전체 unprocessed chunk 중에서,
-    문장 단위로 봤을 때 claim candidate + ingredient candidate가
-    하나라도 있는 chunk만 추려서 앞 50개 사용.
-    """
     all_chunks = fetch_unprocessed_chunks(conn)
-
-    candidate_rich_chunks = [
-        chunk
-        for chunk in all_chunks
-        if _chunk_has_candidate_sentence(chunk)
-    ]
-
+    candidate_rich_chunks = [chunk for chunk in all_chunks if _chunk_has_candidate_sentence(chunk)]
     return candidate_rich_chunks[:TEST_CHUNK_LIMIT]
 
 
 def _validate_claim_compat(raw_claim: dict, sentence: str) -> dict | None:
-    """
-    claim_extractor.py가
-    - 신버전: validate_claim(raw_claim, source_sentence=...)
-    - 구버전: validate_claim(raw_claim)
-    둘 중 어느 형태여도 동작하게 맞춘다.
-    """
     validate_fn = extractor.validate_claim
 
     try:
@@ -119,7 +116,6 @@ def _validate_claim_compat(raw_claim: dict, sentence: str) -> dict | None:
             return validate_fn(raw_claim, source_sentence=sentence)
         return validate_fn(raw_claim)
     except TypeError:
-        # 예외적으로 signature 확인이 꼬이더라도 fallback
         try:
             return validate_fn(raw_claim, source_sentence=sentence)
         except TypeError:
@@ -204,11 +200,9 @@ def main() -> None:
 
                         continue
 
-                    sentence_ingredient_candidates = _get_sentence_level_ingredient_candidates(sentence)
-
-                    # 우선 sentence 기준을 사용하되, 비어 있으면 같은 chunk 안의 다른 문장에서 모은 후보를 fallback
-                    ingredient_candidates = (
-                        sentence_ingredient_candidates or chunk_ingredient_candidates
+                    ingredient_candidates = _resolve_ingredient_candidates_for_sentence(
+                        sentence=sentence,
+                        chunk_ingredient_candidates=chunk_ingredient_candidates,
                     )
 
                     if not ingredient_candidates:

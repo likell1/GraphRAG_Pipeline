@@ -34,6 +34,11 @@ GENERIC_OR_NON_COSMETIC_TARGETS = {
     "unknown",
     "ven",
     "surgical contexts",
+    "microemulsion area",
+    "cell migration",
+    "dermal papilla cells",
+    "dpcs",
+    "anti-acne therapies",
 }
 
 NON_COSMETIC_TARGET_PATTERNS = [
@@ -53,29 +58,70 @@ NON_COSMETIC_TARGET_PATTERNS = [
     "therapeutic option",
     "protective metabolite",
     "protective metabolites",
+    "carcinoma",
+    "cancer",
+    "tumor",
+    "tumour",
+    "microemulsion",
+    "nanoemulsion",
+    "particle size",
+    "release profile",
+    "encapsulation efficiency",
+    "drug delivery",
+    "transdermal delivery",
+    "dermal papilla",
+    "dpc",
+    "cell migration",
+    "gene expression",
+    "mrna",
+    "protein expression",
+    "fibroblast proliferation",
+    "keratinocyte proliferation",
+    "anti-acne therap",
 ]
 
-CANONICAL_INGREDIENT_MAP = {
-    "niacinamide": "Niacinamide",
-    "nicotinamide": "Niacinamide",
-    "nia": "Niacinamide",
-    "panthenol": "Panthenol",
-    "d-panthenol": "Panthenol",
-    "dexpanthenol": "Panthenol",
-    "ceramide": "Ceramide",
-    "ceramides": "Ceramide",
-    "ceramide np": "Ceramide",
-    "ceramide ap": "Ceramide",
-    "ceramide eop": "Ceramide",
-    "ceramide ns": "Ceramide",
-    "ceramide ng": "Ceramide",
-    "ceramide as": "Ceramide",
-    "ceramide eos": "Ceramide",
-    "ceramide np c15": "Ceramide",
-    "tranexamic acid": "Tranexamic acid",
-    "txa": "Tranexamic acid",
-    "salicylic acid": "Salicylic acid",
-}
+ALLOWED_TARGET_HINTS = [
+    "skin",
+    "facial",
+    "barrier",
+    "hydration",
+    "hydrate",
+    "moistur",
+    "dry skin",
+    "xerosis",
+    "transepidermal water loss",
+    "tewl",
+    "hyperpigmentation",
+    "pigmentation",
+    "melasma",
+    "photoaging",
+    "photo-damaged",
+    "photodamaged",
+    "wrinkle",
+    "elasticity",
+    "erythema",
+    "redness",
+    "irritation",
+    "sensitive skin",
+    "acne",
+    "sebum",
+    "immunosuppression",
+    "post-inflammatory hyperpigmentation",
+    "laser-induced post-inflammatory hyperpigmentation",
+    "pih",
+    "tolerance",
+    "tolerability",
+]
+
+TARGET_NORMALIZATION_RULES = [
+    (r"\bpost inflammatory hyperpigmentation\b", "post-inflammatory hyperpigmentation"),
+    (r"\blaser induced post inflammatory hyperpigmentation\b", "laser-induced post-inflammatory hyperpigmentation"),
+    (r"\blaser-induced pih\b", "laser-induced post-inflammatory hyperpigmentation"),
+    (r"\bpih\b", "post-inflammatory hyperpigmentation"),
+    (r"\bphoto damaged\b", "photo-damaged"),
+    (r"\bskin barrier\b", "skin barrier function"),
+    (r"\bbarrier\b", "skin barrier function"),
+]
 
 RESULT_PREFIX_RE = re.compile(r"^(results?|conclusions?):\s*", re.IGNORECASE)
 
@@ -148,14 +194,14 @@ SKIN_CONTEXT_TERMS = [
     "dry skin",
     "brightening",
     "depigmenting",
-    "wound healing",
     "repair",
     "anti-aging",
     "laser-induced pih",
     "infraorbital hyperpigmentation",
     "immunosuppression",
-    "keratinocyte",
     "epidermal recovery",
+    "tolerability",
+    "tolerance",
 ]
 
 POSITIVE_SIGNALS = [
@@ -194,14 +240,12 @@ POSITIVE_SIGNALS = [
     "relieves",
     "mitigate",
     "mitigates",
-    "stimulates",
     "healing",
     "recovery",
     "well-tolerated",
     "well tolerated",
     "tolerability",
     "promising",
-    "therapeutic option",
     "offer greater protection",
     "protective",
     "show promise",
@@ -209,7 +253,6 @@ POSITIVE_SIGNALS = [
     "appear to be",
     "no remarkable side effects",
     "no significant differences in safety outcomes",
-    "impressive modalities",
     "lowered",
     "reduced melasma severity",
     "improve hyperpigmentation",
@@ -223,6 +266,28 @@ POSITIVE_SIGNALS = [
     "supports",
     "supported",
 ]
+
+CANONICAL_INGREDIENT_MAP = {
+    "niacinamide": "Niacinamide",
+    "nicotinamide": "Niacinamide",
+    "nia": "Niacinamide",
+    "panthenol": "Panthenol",
+    "d-panthenol": "Panthenol",
+    "dexpanthenol": "Panthenol",
+    "ceramide": "Ceramide",
+    "ceramides": "Ceramide",
+    "ceramide np": "Ceramide",
+    "ceramide ap": "Ceramide",
+    "ceramide eop": "Ceramide",
+    "ceramide ns": "Ceramide",
+    "ceramide ng": "Ceramide",
+    "ceramide as": "Ceramide",
+    "ceramide eos": "Ceramide",
+    "ceramide np c15": "Ceramide",
+    "tranexamic acid": "Tranexamic acid",
+    "txa": "Tranexamic acid",
+    "salicylic acid": "Salicylic acid",
+}
 
 
 class ClaimExtractor:
@@ -243,9 +308,7 @@ class ClaimExtractor:
 
         for item in items:
             key = item.lower().strip()
-            if not key:
-                continue
-            if key in seen:
+            if not key or key in seen:
                 continue
             seen.add(key)
             unique_items.append(item.strip())
@@ -292,7 +355,6 @@ class ClaimExtractor:
                     aliases.extend(["txa"])
 
                 aliases = self._normalize_unique(aliases)
-
                 excludes = self._split_pipe_field(exclude_if_contains)
 
                 if canonical_name == "Niacinamide":
@@ -359,7 +421,6 @@ class ClaimExtractor:
 
     def _is_blocked_non_cosmetic_domain(self, text: str) -> bool:
         lower = text.lower()
-
         blocked_terms = [
             "perioperative",
             "cardiac surgery",
@@ -378,13 +439,28 @@ class ClaimExtractor:
             "breast reconstruction",
             "traumatic hemorrhage",
             "hemorrhage",
+            "carcinoma",
+            "cancer",
+            "tumor",
+            "tumour",
+            "microemulsion",
+            "nanoemulsion",
+            "particle size",
+            "release profile",
+            "encapsulation efficiency",
+            "drug delivery",
+            "transdermal delivery",
+            "cell migration",
+            "dermal papilla",
+            "dpc",
+            "gene expression",
+            "mrna",
+            "protein expression",
         ]
-
         return any(term in lower for term in blocked_terms)
 
     def _is_results_or_conclusion_sentence(self, text: str) -> bool:
         lower = text.lower().strip()
-
         return (
             lower.startswith("results:")
             or lower.startswith("result:")
@@ -436,10 +512,8 @@ class ClaimExtractor:
 
     def _has_positive_signal(self, text: str) -> bool:
         lower = text.lower()
-
         if self._is_results_or_conclusion_sentence(text):
             return True
-
         return any(term in lower for term in POSITIVE_SIGNALS)
 
     def _starts_with_non_target_subject(self, text: str) -> bool:
@@ -478,7 +552,6 @@ class ClaimExtractor:
         trigger_phrases = [
             "containing",
             "contains",
-            "with",
             "along with",
             "combined with",
             "plus",
@@ -551,17 +624,12 @@ class ClaimExtractor:
 
         if self._is_blocked_non_cosmetic_domain(text):
             return False
-
         if self._is_study_design_sentence(text):
             return False
-
         if self._starts_with_non_target_subject(text):
             return False
 
-        has_positive_signal = self._has_positive_signal(text)
-        has_skin_context = self._has_skin_context(text)
-
-        return has_positive_signal and has_skin_context
+        return self._has_positive_signal(text) and self._has_skin_context(text)
 
     def extract_ingredient_names(self, text: str) -> List[str]:
         text = text.strip()
@@ -575,10 +643,8 @@ class ClaimExtractor:
             return []
 
         matched = self._extract_front_subject_alias(text)
-
         if not matched:
             matched = self._extract_any_alias(text)
-
         if not matched:
             return []
 
@@ -604,9 +670,7 @@ class ClaimExtractor:
         if lower_raw in self.alias_to_canonical:
             return self.alias_to_canonical[lower_raw]
 
-        # ceramide subtype 일반화
-        ceramide_subtype_pattern = r"^ceramide(?:\s+[a-z0-9]+)+$"
-        if re.match(ceramide_subtype_pattern, lower_raw):
+        if re.match(r"^ceramide(?:\s+[a-z0-9]+)+$", lower_raw):
             return "Ceramide"
 
         for canonical_name in self.allowed_canonical_ingredients:
@@ -621,13 +685,59 @@ class ClaimExtractor:
     def get_allowed_ingredient_names(self) -> List[str]:
         return sorted(self.allowed_canonical_ingredients)
 
+    def normalize_target_text(self, target_text: str) -> str:
+        cleaned = target_text.strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = cleaned.strip(" .;,:()[]{}")
+
+        lower = cleaned.lower()
+        for pattern, replacement in TARGET_NORMALIZATION_RULES:
+            lower = re.sub(pattern, replacement, lower)
+
+        normalized = lower.strip()
+
+        canonical_map = {
+            "hyperpigmentation": "hyperpigmentation",
+            "melasma": "melasma",
+            "skin barrier function": "skin barrier function",
+            "skin irritation": "skin irritation",
+            "erythema": "erythema",
+            "facial photoaging": "facial photoaging",
+            "photo-damaged skin": "photo-damaged skin",
+            "dry skin": "dry skin",
+            "acne": "acne",
+            "sebum production": "sebum production",
+            "uv-induced immunosuppression": "UV-induced immunosuppression",
+            "post-inflammatory hyperpigmentation": "post-inflammatory hyperpigmentation",
+            "laser-induced post-inflammatory hyperpigmentation": "laser-induced post-inflammatory hyperpigmentation",
+            "tolerance": "tolerance",
+            "tolerability": "tolerability",
+        }
+
+        if normalized in canonical_map:
+            return canonical_map[normalized]
+
+        return normalized
+
     def _is_generic_or_non_cosmetic_target(self, target_text: str) -> bool:
         lower = target_text.strip().lower()
+
+        if not lower:
+            return True
 
         if lower in GENERIC_OR_NON_COSMETIC_TARGETS:
             return True
 
-        return any(pattern in lower for pattern in NON_COSMETIC_TARGET_PATTERNS)
+        if any(pattern in lower for pattern in NON_COSMETIC_TARGET_PATTERNS):
+            return True
+
+        if len(lower.split()) > 8:
+            return True
+
+        if not any(hint in lower for hint in ALLOWED_TARGET_HINTS):
+            return True
+
+        return False
 
     def _sentence_mentions_ingredient(
         self,
@@ -654,6 +764,21 @@ class ClaimExtractor:
         _, canonical = matched
         return canonical == normalized_ingredient
 
+    def _relation_allowed_for_target(self, relation: str, target: str) -> bool:
+        lower_target = target.lower()
+
+        if relation == "stimulates":
+            return "cell" not in lower_target and "migration" not in lower_target
+
+        if relation == "increases":
+            allowed = ["hydration", "tolerance", "tolerability", "elasticity"]
+            return any(term in lower_target for term in allowed)
+
+        if relation in {"causes", "does_not_cause"}:
+            return any(term in lower_target for term in ["irritation", "erythema", "redness", "sensitivity"])
+
+        return True
+
     def validate_claim(
         self,
         raw_claim: Dict,
@@ -677,23 +802,24 @@ class ClaimExtractor:
         ):
             return None
 
-        if not target or not isinstance(target, str):
+        if not isinstance(target, str) or not target.strip():
             return None
 
-        cleaned_target = target.strip()
-        if not cleaned_target:
-            return None
-
+        cleaned_target = self.normalize_target_text(target)
         if self._is_generic_or_non_cosmetic_target(cleaned_target):
             return None
 
-        if not relation or not isinstance(relation, str):
+        if not isinstance(relation, str) or not relation.strip():
+            return None
+        relation = relation.strip()
+
+        if not self._relation_allowed_for_target(relation, cleaned_target):
             return None
 
-        if not claim_type or not isinstance(claim_type, str):
+        if not isinstance(claim_type, str) or not claim_type.strip():
             return None
 
-        if not evidence_direction or not isinstance(evidence_direction, str):
+        if not isinstance(evidence_direction, str) or not evidence_direction.strip():
             return None
 
         try:
@@ -705,31 +831,37 @@ class ClaimExtractor:
             **raw_claim,
             "ingredient": normalized_ingredient,
             "target": cleaned_target,
-            "relation": relation.strip(),
+            "relation": relation,
             "claim_type": claim_type.strip(),
             "evidence_direction": evidence_direction.strip(),
             "confidence": confidence,
         }
 
-    def extract_effect_ids(self, text: str, effect_rows: List[Dict]) -> List[int]:
-        lower = text.lower()
+    def extract_effect_ids(
+        self,
+        target_text: str,
+        relation: str,
+        effect_rows: List[Dict],
+    ) -> List[int]:
+        lower = target_text.lower()
+        relation = relation.lower()
         matched_effect_ids: List[int] = []
 
         synonym_map = {
-            "ANTI_INFLAMMATORY": ["anti-inflammatory", "inflammation", "inflammatory"],
-            "SOOTHING": ["soothing", "calming", "redness", "irritation"],
-            "BARRIER_REPAIR": ["barrier", "barrier repair", "skin barrier", "barrier function"],
-            "HYDRATING": ["hydration", "hydrating", "hydrate", "moisturizing"],
+            "ANTI_INFLAMMATORY": ["inflammation", "inflammatory"],
+            "SOOTHING": ["soothing", "calming", "redness", "erythema", "irritation", "sensitive skin"],
+            "BARRIER_REPAIR": ["barrier", "skin barrier", "barrier function", "tewl"],
+            "HYDRATING": ["hydration", "hydrate", "hydrating", "moistur", "dry skin"],
             "MOISTURE_RETENTION": ["transepidermal water loss", "tewl", "moisture retention"],
             "SEBUM_REGULATION": ["sebum", "oil control", "oily skin"],
             "KERATOLYTIC": ["keratolytic", "exfoliation", "peeling"],
-            "COMEDOLYTIC": ["comedone", "comedones", "blackhead", "whitehead"],
+            "COMEDOLYTIC": ["comedone", "blackhead", "whitehead"],
             "ANTIMICROBIAL": ["antimicrobial", "antibacterial", "microbial"],
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
             "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
             "ANTIOXIDANT": ["antioxidant", "antioxidative", "oxidative stress"],
-            "WOUND_HEALING": ["wound healing", "healing", "repair"],
-            "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging", "photoaging"],
+            "WOUND_HEALING": ["repair", "recovery"],
+            "ANTI_AGING": ["wrinkle", "elasticity", "aging", "photoaging", "photo-damaged"],
             "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged", "immunosuppression"],
         }
 
@@ -739,8 +871,18 @@ class ClaimExtractor:
             effect_name_en = row["effect_name_en"].lower()
 
             candidates = [effect_name_en] + synonym_map.get(effect_code, [])
-            if any(candidate in lower for candidate in candidates):
-                matched_effect_ids.append(effect_id)
+
+            if not any(candidate in lower for candidate in candidates):
+                continue
+
+            if effect_code == "BARRIER_REPAIR" and relation not in {"improves", "reduces", "prevents"}:
+                continue
+            if effect_code in {"DEPIGMENTING", "BRIGHTENING"} and relation not in {"improves", "reduces", "prevents"}:
+                continue
+            if effect_code == "SOOTHING" and relation not in {"reduces", "improves", "does_not_cause", "is_well_tolerated_for"}:
+                continue
+
+            matched_effect_ids.append(effect_id)
 
         return list(sorted(set(matched_effect_ids)))
 
@@ -752,11 +894,11 @@ class ClaimExtractor:
             "ACNE": ["acne", "acne vulgaris", "pimple"],
             "COMEDONES": ["comedone", "comedones", "blackhead", "whitehead"],
             "OILY_SKIN": ["oily skin", "sebum"],
-            "SENSITIVE_SKIN": ["sensitive skin", "sensitivity"],
+            "SENSITIVE_SKIN": ["sensitive skin", "sensitivity", "tolerance", "tolerability"],
             "REDNESS": ["redness", "erythema"],
             "IRRITATED_SKIN": ["irritation", "stinging", "burning"],
             "DRY_SKIN": ["dry skin", "xerosis"],
-            "DEHYDRATED_SKIN": ["dehydrated skin", "dehydration"],
+            "DEHYDRATED_SKIN": ["dehydrated skin", "dehydration", "hydration"],
             "BARRIER_DAMAGE": ["barrier", "skin barrier", "tewl", "barrier function"],
             "HYPERPIGMENTATION": [
                 "hyperpigmentation",
@@ -764,13 +906,14 @@ class ClaimExtractor:
                 "pigmentation",
                 "pih",
                 "infraorbital hyperpigmentation",
-                "laser-induced pih",
+                "laser-induced post-inflammatory hyperpigmentation",
+                "post-inflammatory hyperpigmentation",
             ],
             "DULLNESS": ["dullness", "uneven skin tone"],
-            "AGING_SIGNS": ["aging", "wrinkle", "elasticity", "photoaging", "photodamaged"],
+            "AGING_SIGNS": ["aging", "wrinkle", "elasticity", "photoaging", "photo-damaged", "photodamaged"],
             "ATOPIC_PRONE": ["atopic", "atopic dermatitis"],
             "ROSACEA_PRONE": ["rosacea"],
-            "POST_ACNE_MARKS": ["post-acne", "post inflammatory hyperpigmentation", "pih"],
+            "POST_ACNE_MARKS": ["post-acne", "post-inflammatory hyperpigmentation", "pih"],
         }
 
         for row in concern_rows:
@@ -817,8 +960,9 @@ class ClaimExtractor:
         concern_rows: List[Dict],
     ) -> Dict[str, List[int]]:
         target_text = validated_claim["target"]
+        relation = validated_claim["relation"]
 
-        effect_ids = self.extract_effect_ids(target_text, effect_rows)
+        effect_ids = self.extract_effect_ids(target_text, relation, effect_rows)
         concern_ids = self.extract_concern_ids(target_text, concern_rows)
 
         return {
