@@ -39,6 +39,12 @@ GENERIC_OR_NON_COSMETIC_TARGETS = {
     "dermal papilla cells",
     "dpcs",
     "anti-acne therapies",
+    "microemulsion area",
+    "cell migration",
+    "dermal papilla cells",
+    "dpcs",
+    "anti-acne therapies",
+    "peristomal skin complications",
 }
 
 NON_COSMETIC_TARGET_PATTERNS = [
@@ -78,6 +84,10 @@ NON_COSMETIC_TARGET_PATTERNS = [
     "fibroblast proliferation",
     "keratinocyte proliferation",
     "anti-acne therap",
+    "peristomal",
+    "ostomy",
+    "stoma",
+    "peristomal skin complications",
 ]
 
 ALLOWED_TARGET_HINTS = [
@@ -111,6 +121,7 @@ ALLOWED_TARGET_HINTS = [
     "pih",
     "tolerance",
     "tolerability",
+    "infraorbital hyperpigmentation",
 ]
 
 TARGET_NORMALIZATION_RULES = [
@@ -119,8 +130,10 @@ TARGET_NORMALIZATION_RULES = [
     (r"\blaser-induced pih\b", "laser-induced post-inflammatory hyperpigmentation"),
     (r"\bpih\b", "post-inflammatory hyperpigmentation"),
     (r"\bphoto damaged\b", "photo-damaged"),
-    (r"\bskin barrier\b", "skin barrier function"),
-    (r"\bbarrier\b", "skin barrier function"),
+    (r"\bphotoaging\b", "facial photoaging"),
+    (r"\btolerability / tolerance\b", "tolerability"),
+    (r"\btolerance / tolerability\b", "tolerability"),
+    (r"\btolerance\b", "tolerability"),
 ]
 
 RESULT_PREFIX_RE = re.compile(r"^(results?|conclusions?):\s*", re.IGNORECASE)
@@ -691,13 +704,52 @@ class ClaimExtractor:
         cleaned = cleaned.strip(" .;,:()[]{}")
 
         lower = cleaned.lower()
+
         for pattern, replacement in TARGET_NORMALIZATION_RULES:
             lower = re.sub(pattern, replacement, lower)
 
-        normalized = lower.strip()
+        # barrier 계열은 별도로 안전하게 정규화
+        if lower in {"barrier", "skin barrier", "barrier function", "skin barrier function"}:
+            lower = "skin barrier function"
+
+        if lower in {
+            "transepidermal water loss",
+            "tewl",
+            "increased transepidermal water loss",
+            "reduced transepidermal water loss",
+        }:
+            lower = "transepidermal water loss"
+
+        if lower in {
+            "hydration",
+            "skin hydration",
+            "cutaneous hydration",
+        }:
+            lower = "hydration"
+
+        if lower in {
+            "erythema",
+            "skin erythema",
+            "facial erythema",
+            "redness",
+        }:
+            lower = "erythema"
+
+        if lower in {
+            "melasma severity",
+            "melasma",
+        }:
+            lower = "melasma"
+
+        if lower in {
+            "hyperpigmentation",
+            "facial hyperpigmentation",
+        }:
+            lower = "hyperpigmentation"
 
         canonical_map = {
             "hyperpigmentation": "hyperpigmentation",
+            "infraorbital hyperpigmentation": "infraorbital hyperpigmentation",
             "melasma": "melasma",
             "skin barrier function": "skin barrier function",
             "skin irritation": "skin irritation",
@@ -710,14 +762,16 @@ class ClaimExtractor:
             "uv-induced immunosuppression": "UV-induced immunosuppression",
             "post-inflammatory hyperpigmentation": "post-inflammatory hyperpigmentation",
             "laser-induced post-inflammatory hyperpigmentation": "laser-induced post-inflammatory hyperpigmentation",
-            "tolerance": "tolerance",
             "tolerability": "tolerability",
+            "hydration": "hydration",
+            "transepidermal water loss": "transepidermal water loss",
+            "skin regeneration": "skin regeneration",
         }
 
-        if normalized in canonical_map:
-            return canonical_map[normalized]
+        if lower in canonical_map:
+            return canonical_map[lower]
 
-        return normalized
+        return lower
 
     def _is_generic_or_non_cosmetic_target(self, target_text: str) -> bool:
         lower = target_text.strip().lower()
@@ -778,6 +832,26 @@ class ClaimExtractor:
             return any(term in lower_target for term in ["irritation", "erythema", "redness", "sensitivity"])
 
         return True
+
+    def _relation_allowed_for_target(self, relation: str, target: str) -> bool:
+        lower_target = target.lower()
+        relation = relation.strip().lower()
+
+        if relation == "stimulates":
+            return "cell" not in lower_target and "migration" not in lower_target
+
+        if relation == "increases":
+            allowed = ["hydration", "tolerability", "elasticity"]
+            return any(term in lower_target for term in allowed)
+
+        if relation in {"causes", "does_not_cause"}:
+            return any(
+                term in lower_target
+                for term in ["irritation", "erythema", "redness", "sensitivity"]
+            )
+
+        return True
+
 
     def validate_claim(
         self,
@@ -849,7 +923,7 @@ class ClaimExtractor:
 
         synonym_map = {
             "ANTI_INFLAMMATORY": ["inflammation", "inflammatory"],
-            "SOOTHING": ["soothing", "calming", "redness", "erythema", "irritation", "sensitive skin"],
+            "SOOTHING": ["soothing", "calming", "redness", "erythema", "irritation", "sensitive skin", "tolerability"],
             "BARRIER_REPAIR": ["barrier", "skin barrier", "barrier function", "tewl"],
             "HYDRATING": ["hydration", "hydrate", "hydrating", "moistur", "dry skin"],
             "MOISTURE_RETENTION": ["transepidermal water loss", "tewl", "moisture retention"],
@@ -860,8 +934,8 @@ class ClaimExtractor:
             "DEPIGMENTING": ["depigment", "melasma", "hyperpigmentation", "pigmentation", "pih"],
             "BRIGHTENING": ["brightening", "skin tone", "dyschromia"],
             "ANTIOXIDANT": ["antioxidant", "antioxidative", "oxidative stress"],
-            "WOUND_HEALING": ["repair", "recovery"],
-            "ANTI_AGING": ["wrinkle", "elasticity", "aging", "photoaging", "photo-damaged"],
+            "WOUND_HEALING": ["wound healing", "healing", "repair"],
+            "ANTI_AGING": ["anti-aging", "wrinkle", "elasticity", "aging", "photoaging", "photo-damaged"],
             "PHOTOPROTECTIVE": ["photoprotective", "uv", "uvb", "photoaging", "photodamaged", "immunosuppression"],
         }
 

@@ -96,6 +96,7 @@ CLAIMS_JSON_SCHEMA: Dict[str, Any] = {
     },
 }
 
+
 SYSTEM_PROMPT = """You are a strict dermatology/cosmetic-ingredient claim extraction system.
 
 You will read exactly one sentence from a paper abstract and extract only explicit, sentence-level claims.
@@ -146,6 +147,7 @@ Relation guidance:
 If the sentence contains uncertainty words like 'may', 'might', 'appears', 'suggests', set hedging=true.
 If the sentence contains negation like 'did not', 'no significant', 'not associated', set negation=true.
 """
+
 
 class LLMClaimExtractor:
     def __init__(

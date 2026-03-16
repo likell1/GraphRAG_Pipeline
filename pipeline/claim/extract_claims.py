@@ -54,7 +54,6 @@ def _get_chunk_level_ingredient_candidates(sentences: list[str]) -> list[str]:
 
     return list(dict.fromkeys(candidates))
 
-
 def _resolve_ingredient_candidates_for_sentence(
     sentence: str,
     chunk_ingredient_candidates: list[str],
@@ -63,11 +62,31 @@ def _resolve_ingredient_candidates_for_sentence(
     if sentence_candidates:
         return sentence_candidates
 
-    # fallback은 chunk 전체에서 딱 1개 후보일 때만 허용
+    # fallback은 chunk 전체에서 정확히 1개 후보일 때만 허용
     if len(chunk_ingredient_candidates) == 1:
         return chunk_ingredient_candidates
 
     return []
+
+
+def _is_duplicate_claim_within_chunk(
+    sentence: str,
+    validated_claim: dict,
+    seen_claim_keys: set[tuple[int, str]],
+    chunk_id: int,
+) -> bool:
+    normalized_summary = (
+        f'{validated_claim["ingredient"]} '
+        f'{validated_claim["relation"]} '
+        f'{validated_claim["target"]}'
+    )
+    key = (chunk_id, normalized_summary)
+
+    if key in seen_claim_keys:
+        return True
+
+    seen_claim_keys.add(key)
+    return False
 
 
 def _chunk_has_candidate_sentence(chunk: dict) -> bool:
@@ -149,6 +168,8 @@ def main() -> None:
         debug_llm_empty_printed = 0
         debug_validation_fail_printed = 0
         debug_inserted_printed = 0
+
+        seen_claim_keys: set[tuple[int, str]] = set()
 
         for chunk in chunks:
             try:
@@ -259,6 +280,14 @@ def main() -> None:
                                 )
                                 debug_validation_fail_printed += 1
 
+                            continue
+
+                        if _is_duplicate_claim_within_chunk(
+                            sentence=sentence,
+                            validated_claim=validated_claim,
+                            seen_claim_keys=seen_claim_keys,
+                            chunk_id=chunk["chunk_id"],
+                        ):
                             continue
 
                         claim_row = extractor.build_claim_row(
