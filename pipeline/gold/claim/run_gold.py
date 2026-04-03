@@ -19,11 +19,7 @@ from pipeline.common.io.gold_writer import (
     write_csv,
     write_json,
 )
-from pipeline.common.models.gold_record import (
-    GoldClaimConcernMapRecord,
-    GoldClaimEffectMapRecord,
-    GoldClaimRecord,
-)
+from pipeline.common.models.gold_record import GoldClaimConcernMapRecord, GoldClaimEffectMapRecord, GoldClaimRecord
 
 try:
     from pipeline.common.repositories.paper_repository import get_connection
@@ -87,15 +83,6 @@ def safe_int(value: Optional[str]) -> Optional[int]:
         return int(value)
     except ValueError:
         return None
-
-
-def safe_float(value: Optional[str], default: float = 0.0) -> float:
-    if value is None or value == "":
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
 
 
 def _get_sentence_level_ingredient_candidates(sentence: str) -> list[str]:
@@ -183,48 +170,6 @@ def _fetch_taxonomy_rows() -> tuple[List[Dict], List[Dict]]:
         return effect_rows, concern_rows
     finally:
         conn.close()
-
-
-def _map_effects(validated_claim: dict, effect_rows: List[Dict]) -> List[Dict]:
-    target = validated_claim["target"].lower()
-    matched: List[Dict] = []
-
-    for row in effect_rows:
-        effect_name = (row.get("effect_name_en") or "").lower()
-        effect_code = (row.get("effect_code") or "").lower()
-
-        if target == effect_name or target == effect_code:
-            matched.append(row)
-            continue
-
-        if effect_name and effect_name in target:
-            matched.append(row)
-
-    unique = {}
-    for row in matched:
-        unique[row["effect_id"]] = row
-    return list(unique.values())
-
-
-def _map_concerns(validated_claim: dict, concern_rows: List[Dict]) -> List[Dict]:
-    target = validated_claim["target"].lower()
-    matched: List[Dict] = []
-
-    for row in concern_rows:
-        concern_name = (row.get("concern_name_en") or "").lower()
-        concern_code = (row.get("concern_code") or "").lower()
-
-        if target == concern_name or target == concern_code:
-            matched.append(row)
-            continue
-
-        if concern_name and concern_name in target:
-            matched.append(row)
-
-    unique = {}
-    for row in matched:
-        unique[row["concern_id"]] = row
-    return list(unique.values())
 
 
 def maybe_upsert_claims_to_db(
@@ -326,6 +271,8 @@ def main(silver_batch_id: Optional[str] = None) -> None:
         chunks = chunks[: settings.gold_test_chunk_limit]
 
     effect_rows, concern_rows = _fetch_taxonomy_rows()
+    effect_by_id: Dict[int, Dict] = {row["effect_id"]: row for row in effect_rows}
+    concern_by_id: Dict[int, Dict] = {row["concern_id"]: row for row in concern_rows}
 
     gold_batch_id = build_batch_id()
     gold_batch_dir = settings.gold_claim_dir / f"batch={gold_batch_id}"
@@ -433,29 +380,39 @@ def main(silver_batch_id: Optional[str] = None) -> None:
                 )
                 claim_records.append(claim_record)
 
-                mapped_effects = _map_effects(validated_claim, effect_rows)
-                for effect in mapped_effects:
+                taxonomy_maps = extractor.infer_taxonomy_maps(
+                    validated_claim=validated_claim,
+                    effect_rows=effect_rows,
+                    concern_rows=concern_rows,
+                )
+
+                for effect_id in taxonomy_maps.get("effect_ids", []):
+                    row = effect_by_id.get(effect_id)
+                    if not row:
+                        continue
                     effect_map_records.append(
                         GoldClaimEffectMapRecord(
                             batch_id=gold_batch_id,
                             claim_key=claim_key,
-                            effect_id=effect["effect_id"],
-                            effect_code=effect["effect_code"],
-                            effect_name_en=effect["effect_name_en"],
-                            confidence_score=min(confidence, 0.7),
+                            effect_id=row["effect_id"],
+                            effect_code=row["effect_code"],
+                            effect_name_en=row["effect_name_en"],
+                            confidence_score=min(max(confidence, 0.6), 0.85),
                         )
                     )
 
-                mapped_concerns = _map_concerns(validated_claim, concern_rows)
-                for concern in mapped_concerns:
+                for concern_id in taxonomy_maps.get("concern_ids", []):
+                    row = concern_by_id.get(concern_id)
+                    if not row:
+                        continue
                     concern_map_records.append(
                         GoldClaimConcernMapRecord(
                             batch_id=gold_batch_id,
                             claim_key=claim_key,
-                            concern_id=concern["concern_id"],
-                            concern_code=concern["concern_code"],
-                            concern_name_en=concern["concern_name_en"],
-                            confidence_score=min(confidence, 0.7),
+                            concern_id=row["concern_id"],
+                            concern_code=row["concern_code"],
+                            concern_name_en=row["concern_name_en"],
+                            confidence_score=min(max(confidence, 0.6), 0.85),
                         )
                     )
 
