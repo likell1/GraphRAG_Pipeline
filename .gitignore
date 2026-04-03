@@ -21,8 +21,8 @@ mvenv/
 .ipynb_checkpoints
 
 # data outputs
-data/tmp/
-data/cache/
+data/
 bronze/
 silver/
+gold/
 *.csv
